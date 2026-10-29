@@ -1,5 +1,20 @@
 # Verification record
 
+## Battle revision - 30 October 2026
+
+- Expanded cores from 80 to 180 metres apart; traversable field now 192 by 20 metres. Camera limits, scenery, deposits, rally depth, relays and spawn positions share the new geometry.
+- Vanguard Surge now has a short windup and continuous swept movement, stops at first contact, and deals a single impact. Render interpolation, smooth turns, distance-driven strides, articulated knees and recoil replace fixed-step visual jumps.
+- Fixed reachable-target priority, ignoring nearby enemies while moving to a rally, attacks/captures across the lane depth, boundary separation, inconsistent forward-base upgrade damage, and control handoffs. Selection buttons now retain their DOM nodes while live values change, avoiding lost clicks.
+- `npm test`: **53/53 passed** across three files, including 10 focused battle regression tests. Five campaign victories on Easy and completed skirmish outcomes on Easy/Normal/Hard still pass through legal command-driven simulation. The older timing figures below apply only to the previous map.
+- Production TypeScript/Vite build passed; JavaScript bundle approximately 560 kB / 150 kB gzip. Existing chunk-size advisory remains.
+- Visible local browser checks: recruitment queues, entering direct control, F transfer, deselection releasing control, pause, tactical-map navigation, Home/End camera travel, and overview. Battle layout inspected at 1126x518 and 803x517. Loading/title presentation preserved.
+- New development harness `/tests/battle-benchmark.html`: **80 live units**, full targeting/movement/projectiles/effects and rendering, with inflated hull values to keep capacity fixed. No production HUD or sound in this harness.
+- Foreground sample: **720 frames / 11.99s = 60.1 FPS**, p95 **16.9 ms**, Medium, **803x517**, render scale **1.25**, NVIDIA GeForce RTX 3050 A Laptop GPU via ANGLE/Direct3D 11. End-of-sample counters: 4 projectiles, 238 draw calls, 74,588 triangles, 79 geometries, 1 texture. This is one measured environment, not a performance guarantee.
+- A background/occluded app-window sample was throttled to about 1.5 FPS with roughly one-second frame intervals. Raising the app window restored the measured foreground result; it is retained here to distinguish browser throttling from normal rendering cost.
+- Campaign completion above is automated simulation coverage, not five full human browser playthroughs. Physical audio listening remains unverified. No new dependencies were installed.
+
+---
+
 Checked on 29 October 2026. These results distinguish simulation tests, visible browser interaction, rendering benchmarks, and deployment.
 
 ## Automated checks

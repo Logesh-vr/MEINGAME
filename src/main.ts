@@ -5,7 +5,8 @@ import '@fontsource/rajdhani/latin-500.css';
 import '@fontsource/rajdhani/latin-600.css';
 import '@fontsource/rajdhani/latin-700.css';
 import './cinematic.css';
-import { KINDS, MISSIONS, OPENING, RESEARCH, ROSTER, THEMES, type Difficulty, type Research, type UnitKind } from './data';
+import './battle.css';
+import { FIELD, KINDS, MISSIONS, OPENING, RESEARCH, ROSTER, THEMES, type Difficulty, type Research, type UnitKind } from './data';
 import { Battle } from './simulation';
 import { loadSave, missionUnlocked, persistSave } from './save';
 import { World } from './render';
@@ -27,7 +28,8 @@ let settingsBack:Screen='menu',storyTime=0,storyIndex=-1,previous=performance.no
 let toastTime=0,tutorialDismissed=false;
 const keys=new Set<string>();
 const performanceSamples:number[]=[];
-let pointerDown:{x:number;y:number}|null=null;
+let pointerDown:{x:number;y:number;lastX:number;button:number}|null=null;
+let edgePointer={x:0,y:0,inside:false};
 const fmt=(n:number)=>Math.floor(n).toLocaleString('en-US');
 const clock=(s:number)=>`${Math.floor(s/60).toString().padStart(2,'0')}:${Math.floor(s%60).toString().padStart(2,'0')}`;
 function persist(){if(!persistSave(save))toast('Browser storage is unavailable. Progress will last for this visit.');}
@@ -81,12 +83,12 @@ function skirmish(){
 
 function settings(){
   screen='settings';
-  shell(`<section class="page-content settings-page"><div class="page-heading"><div><div class="eyebrow">OPTIONS</div><h1>Settings</h1></div><button class="back" data-action="settings-back">← Back</button></div><div class="settings-panel"><label><span><strong>Graphics quality</strong><small>Resolution and real-time shadows</small></span><select id="quality"><option value="low" ${save.settings.quality==='low'?'selected':''}>Low · performance</option><option value="medium" ${save.settings.quality==='medium'?'selected':''}>Medium · balanced</option><option value="high" ${save.settings.quality==='high'?'selected':''}>High · fidelity</option></select></label><label><span><strong>Ambience</strong><small></small></span><input aria-label="Ambient sound volume" id="music" type="range" min="0" max="1" step=".05" value="${save.settings.music}"></label><label><span><strong>Sound effects</strong><small></small></span><input aria-label="Combat effects volume" id="effects" type="range" min="0" max="1" step=".05" value="${save.settings.effects}"></label><label><span><strong>Reduced motion</strong><small>Reduce cinematic camera movement and idle animation</small></span><input id="reducedMotion" type="checkbox" ${save.settings.reducedMotion?'checked':''}></label><div class="settings-note">Progress saves between missions in this browser. Leaving or reloading an active battle ends that match.</div></div><div class="controls-reference"><span class="eyebrow">CONTROLS</span><p><kbd>W A S D</kbd> Move controlled unit <kbd>SPACE</kbd> Fire / extract <kbd>Q</kbd> Special action<br><kbd>ENTER</kbd> Take / release control <kbd>ESC</kbd> Release control / pause <kbd>← →</kbd> Pan camera<br>Click a soldier to select · Double-click to control · Click terrain to rally · Scroll to zoom</p></div></section>`,'settings');
+  shell(`<section class="page-content settings-page"><div class="page-heading"><div><div class="eyebrow">OPTIONS</div><h1>Settings</h1></div><button class="back" data-action="settings-back">← Back</button></div><div class="settings-panel"><label><span><strong>Graphics quality</strong><small>Resolution and real-time shadows</small></span><select id="quality"><option value="low" ${save.settings.quality==='low'?'selected':''}>Low · performance</option><option value="medium" ${save.settings.quality==='medium'?'selected':''}>Medium · balanced</option><option value="high" ${save.settings.quality==='high'?'selected':''}>High · fidelity</option></select></label><label><span><strong>Ambience</strong><small></small></span><input aria-label="Ambient sound volume" id="music" type="range" min="0" max="1" step=".05" value="${save.settings.music}"></label><label><span><strong>Sound effects</strong><small></small></span><input aria-label="Combat effects volume" id="effects" type="range" min="0" max="1" step=".05" value="${save.settings.effects}"></label><label><span><strong>Reduced motion</strong><small>Reduce cinematic camera movement and idle animation</small></span><input id="reducedMotion" type="checkbox" ${save.settings.reducedMotion?'checked':''}></label><div class="settings-note">Progress saves between missions in this browser. Leaving or reloading an active battle ends that match.</div></div><div class="controls-reference"><span class="eyebrow">CONTROLS</span><p><kbd>W A S D</kbd> Move controlled unit <kbd>SPACE</kbd> Fire / extract <kbd>Q</kbd> Special action<br><kbd>ENTER</kbd> Take / release control <kbd>ESC</kbd> Release control / pause <kbd>← →</kbd> Pan camera<br>Click a soldier to select · Double-click to control · Click terrain to rally · Scroll to zoom · Right-drag or screen edges to pan · Click the tactical map to travel · Home to return to base</p></div></section>`,'settings');
 }
 function startBattle(mission?:number){
-  battle=new Battle({mission,theme:[0,3,4][chosenMap],difficulty:save.settings.difficulty});screen='battle';selected=null;keys.clear();accumulator=0;tutorialDismissed=false;world.start(battle);world.select(null);
+  battle=new Battle({mission,theme:[0,3,4][chosenMap],difficulty:save.settings.difficulty});screen='battle';selected=null;keys.clear();accumulator=0;tutorialDismissed=false;pointerDown=null;edgePointer.inside=false;world.start(battle);world.select(null);
   document.body.dataset.screen='battle';
-  app.innerHTML=`<div class="battle-top"><div class="core-status coalition"><div class="eyebrow">COALITION</div><div class="core-bar"><i id="our-core-bar"></i></div><span id="our-core"></span></div><div class="battle-center"><span class="eyebrow">${battle.mission?`OPERATION 0${battle.mission.id+1}`:'SKIRMISH'} / ${THEMES[battle.mission?.theme??battle.options.theme??0].name.toUpperCase()}</span><span id="match-time">00:00</span><span class="micro" id="army-count"></span></div><div class="core-status directorate"><div class="eyebrow">DIRECTORATE</div><div class="core-bar"><i id="enemy-core-bar"></i></div><span id="enemy-core"></span></div></div><div class="army-toolbar"><div class="resource"><span class="helion-glyph">◈</span><strong id="money">560</strong><span>HELION</span></div><div class="orders"><button data-action="order" data-id="attack" title="Advance and engage the enemy">↗ Attack</button><button data-action="order" data-id="defend" title="Hold the rally point and engage nearby enemies">◇ Defend</button><button data-action="order" data-id="retreat" title="Return to the command core">↙ Retreat</button></div><div class="toolbar-right"><button class="icon-button" data-action="overview" title="See the full battlefield">⊡</button><button class="icon-button" data-action="next-unit" title="Select next friendly unit (F)" aria-label="Select next friendly unit">⌖</button><button class="icon-button" data-action="help" title="Show controls">?</button><button class="icon-button" data-action="pause" aria-label="Pause battle">Ⅱ</button></div></div><div class="battle-mission"><span class="eyebrow">${battle.mission?.title.toUpperCase()??'RECLAIM THE GRID'}</span><p id="objective-status"></p></div><div id="selection-panel"></div><div id="tutorial"></div><div class="battle-bottom"><div class="production-row"><span class="eyebrow">ARMY / <span id="production-status">READY</span></span><div id="production-queue"></div><button class="text-button" data-action="research-toggle">Research & relays ↑</button></div><div class="roster">${KINDS.map((k,i)=>{const d=ROSTER[k],locked=!battle!.available.includes(k);return `<button class="unit-card ${locked?'locked':''}" data-action="recruit" data-id="${k}" ${locked?'disabled':''} title="${d.description} · ${d.train}s production"><span class="unit-key">${i+1}</span>${icon(k)}<span class="unit-name">${d.name}</span><span class="unit-cost">${locked?'LOCKED':`◈ ${d.cost}`}</span><span class="unit-tag">${d.tag}</span></button>`;}).join('')}</div><div class="battle-controls"><span id="control-hint">CLICK TO SELECT · DOUBLE-CLICK TO CONTROL · TERRAIN TO RALLY</span><span><kbd>← →</kbd> PAN <kbd>SCROLL</kbd> ZOOM</span></div></div><div id="research-panel"></div><div id="modal"></div><div id="toast" role="status"></div>`;
+  app.innerHTML=`<div class="battle-top"><div class="core-status coalition"><div class="eyebrow">COALITION</div><div class="core-bar"><i id="our-core-bar"></i></div><span id="our-core"></span></div><div class="battle-center"><span class="eyebrow">${battle.mission?`OPERATION 0${battle.mission.id+1}`:'SKIRMISH'} / ${THEMES[battle.mission?.theme??battle.options.theme??0].name.toUpperCase()}</span><span id="match-time">00:00</span><span class="micro" id="army-count"></span></div><div class="core-status directorate"><div class="eyebrow">DIRECTORATE</div><div class="core-bar"><i id="enemy-core-bar"></i></div><span id="enemy-core"></span></div></div><div class="army-toolbar"><div class="resource"><span class="helion-glyph">◈</span><strong id="money">560</strong><span>HELION</span></div><div class="orders"><button data-action="order" data-id="attack" title="Advance and engage the enemy">↗ Attack</button><button data-action="order" data-id="defend" title="Hold the rally point and engage nearby enemies">◇ Defend</button><button data-action="order" data-id="retreat" title="Return to the command core">↙ Retreat</button></div><div class="toolbar-right"><button class="icon-button" data-action="overview" title="See the full battlefield">⊡</button><button class="icon-button" data-action="next-unit" title="Select next friendly unit (F)" aria-label="Select next friendly unit">⌖</button><button class="icon-button" data-action="help" title="Show controls">?</button><button class="icon-button" data-action="pause" aria-label="Pause battle">Ⅱ</button></div></div><div class="battle-mission"><span class="eyebrow">${battle.mission?.title.toUpperCase()??'RECLAIM THE GRID'}</span><p id="objective-status"></p></div><div id="selection-panel"></div><div id="tutorial"></div><div class="battle-bottom"><div class="tactical"><div class="tactical-label"><span>TACTICAL MAP</span><button data-action="home-camera" title="Return to your core (Home)">⌂ CORE</button></div><canvas id="tactical-map" width="440" height="120" tabindex="0" role="slider" aria-label="Battlefield camera position" aria-valuemin="-88" aria-valuemax="88" aria-valuenow="-78" title="Click or drag to move the camera. Arrow keys pan; Home returns to base."></canvas></div><div class="production-row"><span class="eyebrow">ARMY / <span id="production-status">READY</span></span><div id="production-queue"></div><button class="text-button" data-action="research-toggle">Research & relays ↑</button></div><div class="roster">${KINDS.map((k,i)=>{const d=ROSTER[k],locked=!battle!.available.includes(k);return `<button class="unit-card ${locked?'locked':''}" data-action="recruit" data-id="${k}" ${locked?'disabled':''} title="${d.description} · ${d.train}s production"><span class="unit-key">${i+1}</span>${icon(k)}<span class="unit-name">${d.name}</span><span class="unit-cost">${locked?'LOCKED':`◈ ${d.cost}`}</span><span class="unit-tag">${d.tag}</span></button>`;}).join('')}</div><div class="battle-controls"><span id="control-hint">CLICK TO SELECT · DOUBLE-CLICK TO CONTROL · TERRAIN TO RALLY</span><span><kbd>← →</kbd> / EDGES PAN · RIGHT-DRAG CAMERA · SCROLL ZOOM</span></div></div><div id="research-panel"></div><div id="modal"></div><div id="toast" role="status"></div>`;
   updateHUD();
 }
 let deploying=false;
@@ -102,7 +104,7 @@ function deploy(mission?:number){
 function tutorial(){
   if(!battle||tutorialDismissed)return '';
   const t=battle.state.time,m=battle.mission?.id;
-  let title='Your first orders',text='Extractors gather Helion automatically. Recruit soldiers below, then choose Attack to advance. Click terrain to set a defensive rally point.';
+  let title='Your first orders',text='Extractors gather Helion automatically. Recruit soldiers below, then choose Attack to advance. Click terrain to rally. Scroll with the screen edges, arrow keys, or tactical map.';
   if(t>18){title='Take the field';text='Click a friendly unit, then press Enter to control it. Move with WASD, hold Space to attack, and use Q for its ability. Escape returns to army command.';}
   if(m===1&&t>35){title='Break their promise';text='Bulwark shields block frontal ranged fire. Disruptors disable them with EMP; Vanguards strike inside their protection. Research upgrades are below.';}
   else if(m===2&&t>35){title='Control the sky';text='Lancers and Wasps can attack aircraft. Capture the uplink by holding ground soldiers near the central relay for 6 uncontested seconds.';}
@@ -111,6 +113,8 @@ function tutorial(){
   return `<div class="tutorial"><button data-action="dismiss-tutorial" aria-label="Dismiss tutorial">×</button><span class="eyebrow">TIP</span><strong>${title}</strong><p>${text}</p></div>`;
 }
 let researchOpen=false;
+const markupCache=new WeakMap<HTMLElement,string>();
+function setMarkup(element:HTMLElement,html:string){if(markupCache.get(element)!==html){element.innerHTML=html;markupCache.set(element,html);}}
 function updateHUD(){
   if(!battle||screen!=='battle')return;
   const s=battle.state,a=s.armies[0];
@@ -118,22 +122,33 @@ function updateHUD(){
   set('money',fmt(a.money));set('match-time',clock(s.time));set('our-core',`${fmt(a.core)} / 2,400`);set('enemy-core',`${fmt(s.armies[1].core)} / 2,400`);set('army-count',`${battle.count} / 40 UNITS`);
   document.getElementById('our-core-bar')!.style.width=`${a.core/24}%`;document.getElementById('enemy-core-bar')!.style.width=`${s.armies[1].core/24}%`;
   set('objective-status',battle.objectiveStatus());set('production-status',a.queue.length?`${ROSTER[a.queue[0].kind].name.toUpperCase()} · ${Math.ceil(a.queue[0].remaining)}s`:'READY');
-  const queue=document.getElementById('production-queue')!;const queueHTML=a.queue.map((q,i)=>`<button data-action="cancel" data-id="${i}" title="Cancel ${ROSTER[q.kind].name}; 80% refund">${icon(q.kind)}<span>${i===0?Math.ceil(q.remaining)+'s':''}</span></button>`).join('');if(queue.innerHTML!==queueHTML)queue.innerHTML=queueHTML;
+  const queue=document.getElementById('production-queue')!;const queueHTML=a.queue.map((q,i)=>`<button data-action="cancel" data-id="${i}" title="Cancel ${ROSTER[q.kind].name}; 80% refund">${icon(q.kind)}<span>${i===0?Math.ceil(q.remaining)+'s':''}</span></button>`).join('');setMarkup(queue,queueHTML);
   document.querySelectorAll<HTMLButtonElement>('[data-action="order"]').forEach(e=>{e.classList.toggle('active',e.dataset.id===a.order);});
   document.querySelectorAll<HTMLButtonElement>('[data-action="recruit"]').forEach(e=>{const kind=e.dataset.id as UnitKind;e.disabled=!battle!.available.includes(kind)||a.money<ROSTER[kind].cost||battle!.capacity(0)>=40||a.queue.length>=8;});
   const unit=s.units.find(u=>u.id===selected);if(!unit)selected=null;
   const panel=document.getElementById('selection-panel')!;
-  if(unit){const d=ROSTER[unit.kind],controlled=s.controlled===unit.id;const html=`<aside class="selected-unit"><div class="selected-heading">${icon(unit.kind)}<div><span class="eyebrow">${controlled?'DIRECT CONTROL':'UNIT SELECTED'}</span><h3>${d.name}</h3></div><button data-action="deselect" aria-label="Deselect unit">×</button></div><div class="unit-vitals"><span>HULL <strong>${Math.ceil(unit.hp)} / ${d.hp}</strong></span>${d.shield?`<span>SHIELD <strong>${unit.emp>0?'EMP '+Math.ceil(unit.emp)+'s':Math.ceil(unit.shield)+' / '+battle.maxShield(unit)}</strong></span>`:''}${unit.kind==='extractor'?`<span>CARGO <strong>◈ ${unit.cargo}</strong></span>`:''}</div><p>${d.description}</p><button class="control-button" data-action="control">${controlled?'Release control':'Take control'} <kbd>ENTER</kbd></button><button class="ability-button" data-action="ability" ${unit.abilityCooldown>0||(unit.kind==='bulwark'&&unit.emp>0)?'disabled':''}>${d.ability}<span>${unit.abilityCooldown>0?Math.ceil(unit.abilityCooldown)+'s':'Q'}</span></button></aside>`;if(panel.innerHTML!==html)panel.innerHTML=html;}
-  else if(panel.innerHTML)panel.innerHTML='';
+  if(unit){
+    const d=ROSTER[unit.kind],controlled=s.controlled===unit.id;
+    if(panel.dataset.unit!==String(unit.id)){
+      panel.dataset.unit=String(unit.id);
+      panel.innerHTML=`<aside class="selected-unit"><div class="selected-heading">${icon(unit.kind)}<div><span class="eyebrow" data-selected-mode></span><h3>${d.name}</h3></div><button data-action="deselect" aria-label="Deselect unit">×</button></div><div class="unit-vitals"><span>HULL <strong data-hull></strong></span>${d.shield?'<span>SHIELD <strong data-shield></strong></span>':''}${unit.kind==='extractor'?'<span>CARGO <strong data-cargo></strong></span>':''}</div><p>${d.description}</p><button class="control-button" data-action="control"><span data-control-label></span> <kbd>ENTER</kbd></button><button class="ability-button" data-action="ability">${d.ability}<span data-ability-timer></span></button></aside>`;
+    }
+    const value=(selector:string,text:string)=>{const el=panel.querySelector(selector);if(el&&el.textContent!==text)el.textContent=text;};
+    value('[data-selected-mode]',controlled?'DIRECT CONTROL':'UNIT SELECTED');value('[data-hull]',`${Math.ceil(unit.hp)} / ${d.hp}`);
+    value('[data-shield]',unit.emp>0?'EMP '+Math.ceil(unit.emp)+'s':`${Math.ceil(unit.shield)} / ${battle.maxShield(unit)}`);
+    value('[data-cargo]','◈ '+unit.cargo);value('[data-control-label]',controlled?'Release control':'Take control');
+    value('[data-ability-timer]',unit.abilityCooldown>0?Math.ceil(unit.abilityCooldown)+'s':'Q');
+    panel.querySelector<HTMLButtonElement>('[data-action="ability"]')!.disabled=unit.abilityCooldown>0||(unit.kind==='bulwark'&&unit.emp>0);
+  }else if(panel.dataset.unit){panel.innerHTML='';delete panel.dataset.unit;}
   set('control-hint',s.controlled!==null?'DIRECT CONTROL · WASD MOVE · SPACE PRIMARY · Q ABILITY · ESC RELEASE':'CLICK TO SELECT · DOUBLE-CLICK TO CONTROL · TERRAIN TO RALLY');
-  const tut=document.getElementById('tutorial')!,text=tutorial();if(tut.innerHTML!==text)tut.innerHTML=text;
+  const tut=document.getElementById('tutorial')!,text=tutorial();setMarkup(tut,text);
   if(researchOpen)renderResearch();
   if(battle.message){toast(battle.message);battle.message='';}
 }
 function renderResearch(){
   if(!battle)return;const a=battle.state.armies[0];
   const html=`<section class="research-drawer"><div class="drawer-title"><span class="eyebrow">UPGRADES</span><button data-action="research-toggle" aria-label="Close research">×</button></div><div class="research-items">${(Object.keys(RESEARCH) as Research[]).map(k=>`<button data-action="research" data-id="${k}" ${a.research[k]||a.money<RESEARCH[k].cost||battle!.mission?.research===false?'disabled':''}><span>${RESEARCH[k].name}<small>${RESEARCH[k].description}</small></span><strong>${a.research[k]?'✓':battle!.mission?.research===false?'LOCKED':'◈ '+RESEARCH[k].cost}</strong></button>`).join('')}</div><span class="eyebrow relay-title">RELAY NETWORK / +3 HELION PER SECOND EACH</span><div class="relay-items"><button data-action="spawn-home" class="home-spawn ${a.spawn===null?'active':''}">⌂ Main core ${a.spawn===null?'· Deploying here':''}</button>${battle.state.relays.map((r,i)=>`<div class="relay-card"><span>Relay 0${i+1}<small>${r.owner===0?'COALITION':r.owner===1?'DIRECTORATE':r.progress>0?`CAPTURING ${Math.floor(r.progress*100)}%`:'NEUTRAL'}</small></span>${r.owner===0?(r.baseHp>0?`<button data-action="spawn" data-id="${i}" ${a.spawn===i?'disabled':''}>${a.spawn===i?'✓ DEPLOYING':`Deploy here · ${Math.ceil(r.baseHp)} HP`}</button>`:`<button data-action="base" data-id="${i}" ${a.money<350||battle!.mission?.forward===false?'disabled':''}>${battle!.mission?.forward===false?'BASE LOCKED':'Build base ◈ 350'}</button>`):'<small>Hold ground troops nearby to capture</small>'}</div>`).join('')||'<p class="micro">No relays in this sector.</p>'}</div></section>`;
-  const p=document.getElementById('research-panel');if(p&&p.innerHTML!==html)p.innerHTML=html;
+  const p=document.getElementById('research-panel');if(p)setMarkup(p,html);
 }
 function pause(){
   if(!battle)return;screen='pause';battle.state.paused=true;keys.clear();
@@ -154,10 +169,38 @@ function toast(message:string){
   const e=document.getElementById('toast');if(e){e.textContent=message;e.classList.add('visible');toastTime=4;}
   else{let el=document.getElementById('global-toast');if(!el){el=document.createElement('div');el.id='global-toast';el.setAttribute('role','status');document.body.append(el);}el.textContent=message;setTimeout(()=>el?.remove(),5000);}
 }
+function toggleControl(){
+  if(!battle||selected===null)return;
+  const u=battle.state.units.find(u=>u.id===selected);if(!u)return;
+  battle.control(battle.state.controlled===selected?null:selected);keys.clear();
+  if(battle.state.controlled!==null)world.focusUnit(u.x);
+}
+function drawTacticalMap(){
+  if(!battle)return;const map=document.querySelector<HTMLCanvasElement>('#tactical-map'),ctx=map?.getContext('2d');if(!map||!ctx)return;
+  const w=map.width,h=map.height,pad=12;
+  const px=(x:number)=>pad+(x+FIELD.halfLength)/(FIELD.halfLength*2)*(w-pad*2);
+  const pz=(z:number)=>h/2+z/FIELD.halfDepth*(h/2-12);
+  ctx.clearRect(0,0,w,h);ctx.fillStyle='#0a202a';ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle='#2a4650';ctx.lineWidth=1;
+  for(const z of [-FIELD.halfDepth,0,FIELD.halfDepth]){ctx.beginPath();ctx.moveTo(pad,pz(z));ctx.lineTo(w-pad,pz(z));ctx.stroke();}
+  for(const r of battle.state.relays){ctx.fillStyle=r.owner===0?'#8beadd':r.owner===1?'#edaf68':'#687e86';ctx.fillRect(px(r.x)-4,h/2-4,8,8);}
+  battle.state.armies.forEach((_,i)=>{ctx.fillStyle=i===0?'#8beadd':'#edaf68';ctx.fillRect(px(FIELD.coreX[i])-5,h/2-9,10,18);});
+  for(const u of battle.state.units){ctx.fillStyle=u.id===selected?'#ffffff':u.team===0?'#81dbdb':'#f6ad62';const size=u.kind==='titan'?6:3;ctx.fillRect(px(u.x)-size/2,pz(u.z)-size/2,size,size);}
+  const a=battle.state.armies[0];if(a.order==='defend'){ctx.strokeStyle='#b2ffee';ctx.beginPath();ctx.arc(px(a.rally),pz(a.rallyZ),6,0,Math.PI*2);ctx.stroke();}
+  const view=world.cameraBounds(),left=Math.max(pad,px(view.left)),right=Math.min(w-pad,px(view.right));
+  ctx.fillStyle='#b8e8e80b';ctx.fillRect(left,5,right-left,h-10);ctx.strokeStyle='#c1e5df';ctx.lineWidth=2;ctx.strokeRect(left,5,right-left,h-10);
+  map.setAttribute('aria-valuenow',String(Math.round(view.focus)));
+}
+function mapCamera(event:PointerEvent){
+  const map=event.target as HTMLCanvasElement,r=map.getBoundingClientRect();
+  world.focusMap(((event.clientX-r.left)/r.width*2-1)*FIELD.halfLength);
+}
+app.addEventListener('pointerdown',event=>{if((event.target as HTMLElement).id==='tactical-map'&&screen==='battle'){(event.target as HTMLElement).setPointerCapture(event.pointerId);mapCamera(event);}});
+app.addEventListener('pointermove',event=>{if((event.target as HTMLElement).id==='tactical-map'&&event.buttons===1&&screen==='battle')mapCamera(event);});
 function selectNextUnit(){
   if(!battle||screen!=='battle')return;
   const units=battle.state.units.filter(u=>u.team===0).sort((a,b)=>Number(a.kind==='extractor')-Number(b.kind==='extractor')||a.id-b.id);
-  if(!units.length)return;const i=units.findIndex(u=>u.id===selected);const unit=units[(i+1)%units.length];selected=unit.id;world.select(selected);world.focus(unit.x);updateHUD();
+  if(!units.length)return;const i=units.findIndex(u=>u.id===selected);const unit=units[(i+1)%units.length];if(battle.state.controlled!==null){battle.control(unit.id);keys.clear();}selected=unit.id;world.select(selected);world.focusUnit(unit.x);updateHUD();
 }
 app.addEventListener('click',event=>{
   const button=(event.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');if(!button||button.disabled)return;audio.unlock();audio.click();
@@ -181,6 +224,7 @@ app.addEventListener('click',event=>{
     case'cancel':battle?.cancelProduction(Number(id));break;
     case'order':battle?.setOrder(id as 'attack'|'defend'|'retreat');break;
     case'overview':world.overview();break;
+    case'home-camera':world.focusMap(FIELD.coreX[0]+12);break;
     case'next-unit':selectNextUnit();break;
     case'help':tutorialDismissed=false;toast('F cycles friendly units. Enter takes control. WASD move · Space attack · Q ability · Escape release / pause.');break;
     case'pause':pause();break;
@@ -188,11 +232,11 @@ app.addEventListener('click',event=>{
     case'restart':researchOpen=false;deploy(battle?.options.mission);break;
     case'leave':{const wasCampaign=!!battle?.mission;battle=null;world.menu();if(wasCampaign)campaign();else menu();break;}
     case'next-mission':{const next=(battle?.mission?.id??0)+1;researchOpen=false;briefing(next);break;}
-    case'deselect':selected=null;world.select(null);break;
-    case'control':if(battle&&selected!==null)battle.control(battle.state.controlled===selected?null:selected);break;
+    case'deselect':battle?.control(null);keys.clear();selected=null;world.select(null);break;
+    case'control':toggleControl();break;
     case'ability':if(selected!==null)battle?.ability(selected);break;
     case'dismiss-tutorial':tutorialDismissed=true;break;
-    case'research-toggle':researchOpen=!researchOpen;if(!researchOpen)document.getElementById('research-panel')!.innerHTML='';break;
+    case'research-toggle':researchOpen=!researchOpen;if(!researchOpen)setMarkup(document.getElementById('research-panel')!,'');break;
     case'research':if(!battle?.research(id as Research))toast('Research unavailable or insufficient Helion.');break;
     case'base':if(battle?.buildBase(Number(id)))toast('Forward base online. New combat troops deploy here.');break;
     case'spawn':battle?.setSpawn(Number(id));break;
@@ -211,13 +255,28 @@ app.addEventListener('input',event=>{
   if(el.id==='reducedMotion')save.settings.reducedMotion=el.checked;
   world.settings(save.settings);audio.unlock();audio.apply(save.settings);persist();
 });
-canvas.addEventListener('pointerdown',event=>{pointerDown={x:event.clientX,y:event.clientY};audio.unlock();});
-canvas.addEventListener('pointerup',event=>{
-  if(!battle||screen!=='battle'||!pointerDown||Math.hypot(event.clientX-pointerDown.x,event.clientY-pointerDown.y)>7)return;
-  const picked=world.pick(event.clientX,event.clientY);selected=picked.unit;world.select(selected);
-  if(selected===null){battle.control(null);battle.setRally(picked.x);toast('Defensive rally point updated.');}updateHUD();
+canvas.addEventListener('pointerdown',event=>{
+  if(screen!=='battle')return;
+  pointerDown={x:event.clientX,y:event.clientY,lastX:event.clientX,button:event.button};canvas.setPointerCapture(event.pointerId);audio.unlock();
 });
-canvas.addEventListener('dblclick',event=>{if(screen==='battle'&&battle){const p=world.pick(event.clientX,event.clientY);if(p.unit!==null){selected=p.unit;world.select(selected);battle.control(selected);updateHUD();}}});
+canvas.addEventListener('pointermove',event=>{
+  edgePointer={x:event.clientX,y:event.clientY,inside:true};
+  if(screen==='battle'&&pointerDown&&pointerDown.button!==0){
+    const span=world.cameraBounds();world.pan((pointerDown.lastX-event.clientX)*(span.right-span.left)/innerWidth);pointerDown.lastX=event.clientX;
+  }
+});
+canvas.addEventListener('pointerleave',()=>edgePointer.inside=false);
+canvas.addEventListener('pointercancel',()=>{pointerDown=null;edgePointer.inside=false;});
+canvas.addEventListener('pointerup',event=>{
+  const down=pointerDown;pointerDown=null;
+  if(canvas.hasPointerCapture(event.pointerId))canvas.releasePointerCapture(event.pointerId);
+  if(!battle||screen!=='battle'||!down||down.button!==0||Math.hypot(event.clientX-down.x,event.clientY-down.y)>7)return;
+  const picked=world.pick(event.clientX,event.clientY);
+  if(battle.state.controlled!==null&&battle.state.controlled!==picked.unit){battle.control(null);keys.clear();}
+  selected=picked.unit;world.select(selected);
+  if(selected===null){battle.setRally(picked.x,picked.z);toast('Rally set. Hold this position.');}updateHUD();
+});
+canvas.addEventListener('dblclick',event=>{if(screen==='battle'&&battle){const p=world.pick(event.clientX,event.clientY);if(p.unit!==null){selected=p.unit;world.select(selected);battle.control(selected);keys.clear();world.focusUnit(battle.state.units.find(u=>u.id===selected)!.x);updateHUD();}}});
 canvas.addEventListener('wheel',event=>{if(screen!=='battle')return;event.preventDefault();world.zoomBy(event.deltaY*.0006);},{passive:false});
 canvas.addEventListener('contextmenu',event=>event.preventDefault());
 window.addEventListener('keydown',event=>{
@@ -230,7 +289,9 @@ window.addEventListener('keydown',event=>{
   }
   if(key==='escape'){if(screen==='battle'&&battle){if(battle.state.controlled!==null)battle.control(null);else pause();}else if(screen==='pause')resume();else if(screen==='settings')document.querySelector<HTMLButtonElement>('[data-action="settings-back"]')?.click();else if(screen==='campaign'||screen==='skirmish'||screen==='briefing')menu();return;}
   if(screen!=='battle'||!battle)return;audio.unlock();
-  if(key==='enter'&&selected!==null){event.preventDefault();battle.control(battle.state.controlled===selected?null:selected);}
+  if(key==='enter'&&selected!==null){event.preventDefault();toggleControl();}
+  if(key==='home'){event.preventDefault();world.focusMap(FIELD.coreX[0]+12);}
+  if(key==='end'){event.preventDefault();world.focusMap(FIELD.coreX[1]-12);}
   if(key==='q'&&battle.state.controlled!==null)battle.ability(battle.state.controlled);
   if(key==='f')selectNextUnit();
   const hotkey=Number(key);if(hotkey>=1&&hotkey<=7)battle.recruit(KINDS[hotkey-1]);
@@ -246,14 +307,16 @@ function frame(now:number){
     if(screen==='story'){storyTime+=delta;updateStory();}
     if(battle&&screen==='battle'){
       battle.input={x:(keys.has('d')?1:0)-(keys.has('a')?1:0),z:(keys.has('s')?1:0)-(keys.has('w')?1:0),fire:keys.has(' ')};
-      if(keys.has('arrowleft'))world.pan(-delta*25);if(keys.has('arrowright'))world.pan(delta*25);
+      if(keys.has('arrowleft'))world.pan(-delta*38);if(keys.has('arrowright'))world.pan(delta*38);
+      if(edgePointer.inside&&!pointerDown&&edgePointer.y>95&&edgePointer.y<innerHeight-128){if(edgePointer.x<24)world.pan(-delta*38);else if(edgePointer.x>innerWidth-24)world.pan(delta*38);}
       accumulator+=delta;let steps=0;while(accumulator>=1/30&&steps++<4){battle.tick(1/30);accumulator-=1/30;}
       const events=battle.takeEvents();world.showEvents(events);audio.events(events);
       if(battle.state.winner!==null)showResult();
       hudTime+=delta;if(hudTime>.16){hudTime=0;updateHUD();}
       if(toastTime>0){toastTime-=delta;if(toastTime<=0)document.getElementById('toast')?.classList.remove('visible');}
     }
-    world.update(delta,screen==='story'?Math.min(1,storyTime/35):undefined);
+    world.update(delta,screen==='story'?Math.min(1,storyTime/35):undefined,accumulator*30);
+    if(screen==='battle')drawTacticalMap();
     if(battle&&screen==='battle'){performanceSamples.push(now);if(performanceSamples.length>180)performanceSamples.shift();}
   }
   requestAnimationFrame(frame);
