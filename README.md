@@ -1,6 +1,37 @@
-# HELION DIVIDE
+# MEINGAME
 
-A single-player 3D army strategy game about reconnecting a civilization that has learned to ration the light. Built for a desktop browser, with an original story, procedural models, and synthesized audio.
+### HELION DIVIDE — reclaim the light
+
+A single-player 3D army strategy game built with **TypeScript, Three.js, and Vite**. Gather Helion, recruit a futuristic army, command the battlefield, or take direct control of an individual soldier.
+
+![HELION DIVIDE cinematic title screen](docs/images/title-screen.png)
+
+[Setup](#running-locally) · [Controls](#controls) · [Architecture](#design-and-architecture) · [Test evidence](VALIDATION.md) · [Hosted game](https://helion-divide.sharpemu67.chatgpt.site/)
+
+**Hosted access:** the current deployment is owner-private and requires authorized sign-in. This GitHub repository is public; anyone can run the game locally with the instructions below.
+
+## The game
+
+Humanity depends on the Helion Grid, a planetary energy network. When the Central Directorate cuts power to frontier settlements, engineers form the Coalition and restart an abandoned extractor. The Directorate calls it theft. The Coalition calls it survival.
+
+MEINGAME is the repository name; **HELION DIVIDE** is the game's title. The project brings the resource gathering, recruitment, and battlefield commands of side-view army strategy into an original futuristic 3D setting.
+
+- Five campaign missions with briefings, objectives, tutorial prompts, endings, and sequential unlocks.
+- Replayable AI skirmishes on three battlefield presets with Easy, Normal, and Hard difficulty.
+- Seven unit roles, directional shields, EMP, anti-air combat, research, capturable relays, and forward deployment.
+- Attack, Defend, and Retreat commands alongside direct keyboard control of friendly units.
+- Cinematic menus and story captions, procedural articulated models, synthesized audio, graphics presets, and reduced-motion options.
+- Browser-local progress between missions; no game backend or account system.
+
+| Unit | Role |
+| --- | --- |
+| Extractor | Collects and delivers Helion |
+| Vanguard | Fast plasma-blade infantry with a continuous charge |
+| Lancer | Ranged infantry that can engage aircraft |
+| Bulwark | Frontline protection with a directional shield |
+| Disruptor | EMP support that temporarily disables shields |
+| Wasp | Flying combat drone |
+| Titan | Heavy siege mech with ground splash damage |
 
 ## Play
 
@@ -9,6 +40,8 @@ The first visit opens the skippable prologue. Choose **Campaign** for five seque
 Battles span a 192-metre field, with cores 180 metres apart and 20 metres of traversable depth. Scroll along the front with the screen edges, arrow keys, right-dragging, or the clickable tactical map. A compact command deck keeps the fighting area visible.
 
 Extractors automatically haul Helion to the main core. Recruit troops, protect the supply line, and destroy the enemy command core. Campaign missions add relay and forward-base objectives. Ground soldiers capture a relay after six uncontested seconds nearby; captured relays produce three Helion per second. A forward base costs 350 Helion and becomes a combat-unit deployment point. Workers always deploy at the main core. The army limit is 40 units per side, including queued production. Cancel queued production for an 80% refund.
+
+## Controls
 
 | Input | Action |
 | --- | --- |
@@ -33,24 +66,44 @@ Automatic army orders are Attack, Defend, and Retreat. Defend engages threats en
 
 ## Running locally
 
-Requires Node.js 22.12+ and npm.
+Requires **Node.js 22.12+**, npm, and a desktop browser with WebGL 2 / hardware acceleration.
 
-```powershell
+```sh
+git clone https://github.com/Logesh-vr/MEINGAME.git
+cd MEINGAME
 npm ci
 npm run dev
 ```
 
 Open the URL printed by Vite. For a production build:
 
-```powershell
+```sh
 npm test
 npm run build
 npm run preview
 ```
 
-`dist/` is a static site. The production game makes no API calls and uses no accounts, remote font requests, paid assets, or remote asset downloads. The Sites hosting layer controls access to the private deployed link. `.openai/hosting.json` retains the existing Site identity; reuse it for updates.
+`npm run build` creates `dist/`, a static site that can be served by a static host. Generated builds and dependencies are intentionally excluded from Git; the lockfile is included for reproducible installation. The production game makes no API calls and uses no accounts, remote font requests, paid assets, or remote asset downloads. The Sites hosting layer controls access to the private deployed link. `.openai/hosting.json` retains the existing Site identity; reuse it for updates.
 
 ## Design and architecture
+
+```text
+src/
+  simulation.ts       Fixed-step economy, movement, combat and AI
+  render.ts           Three.js scene, models, animation and camera
+  main.ts             Menus, HUD, input and battle lifecycle
+  data.ts             Unit statistics, missions and battlefield geometry
+  save.ts             Validated browser-local progress and settings
+  audio.ts            Synthesized ambience and sound effects
+  style.css           Base interface styles
+  cinematic.css       Title, story and chapter presentation
+  battle.css          Compact battle HUD and tactical map
+public/licenses/      Bundled font license notices
+tests/                Simulation regressions, playthroughs and browser harnesses
+docs/images/          Actual game screenshots
+VALIDATION.md         Detailed checks, performance and verification limits
+```
+
 
 - **Simulation:** `src/simulation.ts` runs at 30 fixed steps per second. Economy, queues, research, directional shields, EMP, air targeting, projectiles, splash, capture, forward deployment, objectives, and AI are independent of Three.js.
 - **Content:** `src/data.ts` defines the seven unit roles, three research upgrades, five campaign operations, original prologue, and five environment themes.
@@ -63,6 +116,12 @@ Both factions pay the same unit prices and use the same extraction rules, starti
 The artwork deliberately uses stylized geometry with a restrained graphite/cyan/amber palette rather than photorealistic assets. Full cutscene voice acting and prerecorded cinematics are outside this build; the story uses the live 3D scene, animated camera, captions, and ambience.
 
 ## Verification and limits
+
+**53 automated tests** cover the economy, production limits, air targeting, directional shielding, EMP recovery, upgrades, captures, forward bases, mission outcomes, saves, control transitions, and movement regressions. Command-driven tests complete all five campaign missions on Easy and reach outcomes at every skirmish difficulty.
+
+The 80-unit live-simulation benchmark recorded **60.1 FPS on Medium** at **803 × 517**, render scale 1.25, on an NVIDIA GeForce RTX 3050 A Laptop GPU through ANGLE / Direct3D 11. It excludes the normal HUD and audio and uses inflated hull values to hold the sample at capacity. It is a measured test case, not a guarantee for every machine.
+
+![Expanded battlefield in strategic overview mode](docs/images/battlefield-overview.png)
 
 See [VALIDATION.md](VALIDATION.md) for test evidence and measured rendering performance. Automated campaign completion is a simulation test; it is distinct from a human playthrough. Browser checks verify representative UI and rendering flows separately.
 

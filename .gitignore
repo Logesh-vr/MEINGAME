@@ -1,8 +1,32 @@
+# Dependencies and generated output
 node_modules/
 dist/
-.sites/
-.local/
 coverage/
+.vite/
+.cache/
+*.tsbuildinfo
+
+# Local development, hosting scratch data and credentials
+.local/
+.sites/
+.vercel/
+.env
+.env.*
+!.env.example
+.openai/*
+!.openai/hosting.json
+
+# Test artifacts and packaged deployments
+test-results/
+playwright-report/
 *.tgz
 *.tar.gz
+*.zip
 *.log
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
